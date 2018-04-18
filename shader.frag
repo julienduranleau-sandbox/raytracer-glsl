@@ -3,7 +3,8 @@ uniform float iTime;
 uniform float iFrame;
 
 #define M_PI 3.1415926535897932384626433832795
-#define RAY_T_MIN 0.0000001
+#define RAY_MIN 0.0000001
+#define RAY_MAX 100000000000.0
 
 struct CameraSize {
     float width;
@@ -19,26 +20,37 @@ struct Camera {
     CameraSize size;
 };
 
+struct RayIntersection {
+    float t;
+    vec3 color;
+};
+
 struct Ray {
     vec3 origin;
     vec3 direction;
+    RayIntersection intersection;
 };
 
 struct Sphere {
     vec3 position;
     float radius;
+    vec3 color;
 };
 
 struct Plane {
     vec3 position;
     vec3 normal;
+    vec3 color;
 };
-
 
 float length2(vec2 v) { return v.x*v.x + v.y*v.y; }
 float length2(vec3 v) { return v.x*v.x + v.y*v.y + v.z*v.z; }
 
-bool intersects(Ray ray, Sphere sphere) {
+vec3 rgb2vec(int r, int g, int b) {
+    return vec3(float(r)/255.0, float(g)/255.0, float(b)/255.0);
+}
+
+bool intersect(inout Ray ray, Sphere sphere) {
     // Transform ray so we can consider origin-centred sphere
     Ray localRay;
     localRay.origin = ray.origin - sphere.position;
@@ -61,27 +73,21 @@ bool intersects(Ray ray, Sphere sphere) {
     float t2 = (-b + sqrt(discriminant)) / (2.0 * a);
 
     // First check if close intersection is valid
-    /*if (t1 > 0.0001 && t1 < intersection.t) {
-        intersection.t = t1;
-    } else if (t2 > 9999999999 && t2 < intersection.t) {
-        intersection.t = t2;
-    } else {
-        // Neither is valid
-        return false
-    }*/
-
-    if (t1 > RAY_T_MIN) {
+    if (t1 > RAY_MIN && t1 < ray.intersection.t) {
+        ray.intersection.t = t1;
+        ray.intersection.color = sphere.color;
+        return true;
+    } else if (t2 > RAY_MAX && t2 < ray.intersection.t) {
+        ray.intersection.t = t2;
+        ray.intersection.color = sphere.color;
         return true;
     } else {
+        // Neither is valid
         return false;
     }
-
-    // Finish populating intersection
-    //intersection.pShape = this;
-    //intersection.color = color;
 }
 
-bool intersects(Ray ray, Plane plane) {
+bool intersect(inout Ray ray, Plane plane) {
     // First, check if we intersect
     float dDotN = dot(ray.direction, plane.normal);
 
@@ -93,18 +99,16 @@ bool intersects(Ray ray, Plane plane) {
     // Find point of intersection
     float t = dot(plane.position - ray.origin, plane.normal) / dDotN;
 
-    if (t <= RAY_T_MIN /*|| t >= intersection.t*/) {
+    if (t <= RAY_MIN || t >= ray.intersection.t) {
         // Outside relevant range
         return false;
     }
 
-    // intersection.t = t;
-    // intersection.pShape = this;
-    // intersection.color = color;
+    ray.intersection.t = t;
+    ray.intersection.color = plane.color;
 
     return true;
 }
-
 
 Camera createCamera(vec3 origin, vec3 target, float fov, float aspectRatio, vec3 upGuide) {
     Camera camera;
@@ -121,41 +125,38 @@ Camera createCamera(vec3 origin, vec3 target, float fov, float aspectRatio, vec3
 }
 
 Ray createRay(Camera camera) {
-    Ray ray;
-
     vec2 px = gl_FragCoord.xy / iResolution.xy * 2.0 - 1.0;
     vec3 xOffset = camera.right * px.x * camera.size.width;
     vec3 yOffset = camera.up * px.y * camera.size.height;
     vec3 rayDirection = camera.forward + xOffset + yOffset;
 
-    ray.origin = camera.origin;
-    ray.direction = rayDirection;
-
+    RayIntersection intersection = RayIntersection(RAY_MAX, vec3(0.0));
+    Ray ray = Ray(camera.origin, rayDirection, intersection);
     return ray;
 }
 
 void main() {
-    vec3 cOrigin = vec3(0.0, 0.0, 1.0);
-    vec3 cTarget = vec3(0.0, 0.0, 0.0);
-    vec3 cUpGuide = vec3(0.0, 1.0, 0.0);
-    float fov = 45.0;
-    float aspectRatio = iResolution.x / iResolution.y;
-    Camera camera = createCamera(cOrigin, cTarget, fov, aspectRatio, cUpGuide);
+    vec3 camOrigin = vec3(0.0, 0.0, 1.0);
+    vec3 camTarget = vec3(0.0, 0.0, 0.0);
+    vec3 camUpGuide = vec3(0.0, 1.0, 0.0);
+    float camFov = 45.0;
+    float camAspectRatio = iResolution.x / iResolution.y;
+    Camera camera = createCamera(camOrigin, camTarget, camFov, camAspectRatio, camUpGuide);
 
     Ray ray = createRay(camera);
 
-    Sphere sphere1 = Sphere(vec3(0, 0, -3.0), 1.0);
-    Sphere sphere2 = Sphere(vec3(0, 0, -5.0), 2.0);
+    Sphere sphere1 = Sphere(vec3(0, 0, -3.0), 1.0, rgb2vec(234, 147, 32));
+    Sphere sphere2 = Sphere(vec3(0, 0, -5.0), 2.0, rgb2vec(234, 31, 72));
 
-    Plane plane1 = Plane(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+    Plane plane1 = Plane(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), rgb2vec(141, 162, 196));
 
     sphere1.position.x += cos(iTime);
+    sphere1.position.z += cos(iTime);
     plane1.position.y += cos(iTime);
 
-    vec3 c = vec3(0.0);
-    if (intersects(ray, sphere1)) { c = vec3(1.0); }
-    if (intersects(ray, sphere2)) { c = vec3(1.0); }
-    if (intersects(ray, plane1)) { c = vec3(1.0); }
+    intersect(ray, sphere1);
+    intersect(ray, sphere2);
+    intersect(ray, plane1);
 
-    gl_FragColor = vec4(c, 1.0);
+    gl_FragColor = vec4(ray.intersection.color, 1.0);
  }
