@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Ray-tracing</title>
+        <style>
+            html, body {
+                padding: 0px;
+                margin: 0px;
+                overflow: hidden;
+                background: #1a1a1a;
+            }
+            .glslSandboxContainer {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+            }
+        </style>
+    </head>
+    <body>
+        <script src="helpers/GlslSandbox.js"></script>
+        <script src="libs/stats.min.js"></script>
+        <script src="libs/three.min.js"></script>
+        <script src="App.js"></script>
+        <script>
+            let app = new App()
+        </script>
+    </body>
+</html>
