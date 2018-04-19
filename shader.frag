@@ -61,8 +61,6 @@ struct Scene {
     Plane planes[N_PLANES];
 };
 
-Scene globalScene;
-
 vec3 rgb2vec(int r, int g, int b) {
     return vec3(float(r)/255.0, float(g)/255.0, float(b)/255.0);
 }
@@ -195,16 +193,14 @@ vec3 castRay(Ray ray, Scene scene, int depth, vec3 currentColor) {
         }
     }
 
-
-
     return hitColor;
 }
 
-void createScene() {
-    globalScene.spheres[0] = Sphere(vec3(0, 0, -3.0), 1.0, rgb2vec(234, 147, 32));
-    globalScene.spheres[1] = Sphere(vec3(0, 0, -5.0), 2.0, rgb2vec(234, 31, 72));
-    globalScene.planes[0] = Plane(vec3(0.0, -1.0, 0.0), vec3(0.0, 1.0, 0.0), rgb2vec(141, 162, 196));
-    globalScene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(1.0), 1.0);
+void fillScene(out Scene scene) {
+    scene.spheres[0] = Sphere(vec3(0, 0, -3.0), 1.0, rgb2vec(234, 147, 32));
+    scene.spheres[1] = Sphere(vec3(0, 0, -5.0), 2.0, rgb2vec(234, 31, 72));
+    scene.planes[0] = Plane(vec3(0.0, -1.0, 0.0), vec3(0.0, 1.0, 0.0), rgb2vec(141, 162, 196));
+    scene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(1.0), 1.0);
 }
 
 void main() {
@@ -216,15 +212,16 @@ void main() {
     Camera camera = createCamera(camOrigin, camTarget, camFov, camAspectRatio, camUpGuide);
 
     Ray cameraRay = createRayFromCamera(camera);
-    createScene();
+    Scene scene;
+    fillScene(scene);
 
-    globalScene.spheres[0].position.x += cos(iTime);
-    globalScene.spheres[0].position.z += cos(iTime);
-    globalScene.lights[0].position.x += cos(iTime) * 3.0;
-    globalScene.lights[0].position.y += sin(iTime) * 3.0;
-    //globalScene.planes[0].position.y += cos(iTime);
+    scene.spheres[0].position.x += cos(iTime);
+    scene.spheres[0].position.z += cos(iTime);
+    scene.lights[0].position.x += cos(iTime) * 3.0;
+    scene.lights[0].position.y += sin(iTime) * 3.0;
+    //scene.planes[0].position.y += cos(iTime);
 
-    vec3 color = castRay(cameraRay, globalScene, 0, vec3(0.0));
+    vec3 color = castRay(cameraRay, scene, 0, vec3(0.0));
 
     gl_FragColor = vec4(color, 1.0);
  }
