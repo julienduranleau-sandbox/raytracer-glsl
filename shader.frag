@@ -8,9 +8,9 @@ uniform float iFrame;
 #define RAY_MAX_LENGTH 100000000000.0
 #define RAY_MAX_DEPTH 5
 
-#define N_LIGHTS 1
 #define N_SPHERES 2
 #define N_PLANES 1
+#define N_LIGHTS 2
 
 struct CameraSize {
     float width;
@@ -51,6 +51,7 @@ struct Plane {
 
 struct Light {
     vec3 position;
+    vec3 direction;
     vec3 color;
     float force;
 };
@@ -183,13 +184,20 @@ vec3 castRay(Ray ray, Scene scene, int depth, vec3 currentColor) {
 
             // Phong
             RayIntersection lightIntersection = RayIntersection(RAY_MAX_LENGTH, vec3(0.0), vec3(0.0));
-            vec3 shadowRayOrigin = hitPoint + (intersection.normal * 0.001);
-            trace(shadowRayOrigin, normalize(lightDirection), scene, lightIntersection);
-            if (lightIntersection.t * lightIntersection.t < len2) {
-                hitColor = intersection.color * 0.2;
-            } else {
-                hitColor = intersection.color;
+            vec3 lightRayOrigin = hitPoint + (intersection.normal * 0.001);
+            trace(lightRayOrigin, normalize(lightDirection), scene, lightIntersection);
+
+            vec3 shadedColor = intersection.color * clamp(dot(intersection.normal, scene.lights[i].direction) * -1.0, 0.0, 1.0);
+            if (lightIntersection.t * lightIntersection.t > len2) {
+                hitColor += shadedColor;
             }
+
+            // https://youtu.be/GZ_1xOm-3qU?t=391
+            // Specular
+            vec3 reflectedLightDirection = reflect(-scene.lights[i].direction, intersection.normal);
+            float specular = max(0.0, dot(reflectedLightDirection, ray.direction));
+            float damping = 0.1;
+            hitColor += max(0.0, (specular - damping));
         }
     }
 
@@ -200,7 +208,8 @@ void fillScene(out Scene scene) {
     scene.spheres[0] = Sphere(vec3(0, 0, -3.0), 1.0, rgb2vec(234, 147, 32));
     scene.spheres[1] = Sphere(vec3(0, 0, -5.0), 2.0, rgb2vec(234, 31, 72));
     scene.planes[0] = Plane(vec3(0.0, -1.0, 0.0), vec3(0.0, 1.0, 0.0), rgb2vec(141, 162, 196));
-    scene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(1.0), 1.0);
+    scene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(0.0, -1.0, 0.0), vec3(1.0), 1.0);
+    scene.lights[1] = Light(vec3(-4.0, 4.0, 2.0), vec3(0.3, -1.0, 0.0), vec3(1.0), 1.0);
 }
 
 void main() {
