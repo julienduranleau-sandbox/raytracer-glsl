@@ -8,8 +8,14 @@ uniform float iFrame;
 #define INFINITY 100000000000.0
 #define RAY_MAX_DEPTH 5
 
+#define IOR_AIR 1.00
+#define IOR_WATER 1.3333
+#define IOR_ICE 1.31
+#define IOR_GLASS 1.52
+#define IOR_DIAMOND 2.42
+
 #define N_SPHERES 2
-#define N_PLANES 1
+#define N_PLANES 3
 #define N_LIGHTS 2
 
 struct CameraSize {
@@ -30,6 +36,8 @@ struct Material {
     vec3 color;
     float damping;
     float reflectivity;
+    float refractivity;
+    float ior;
 };
 
 struct RayIntersection {
@@ -168,17 +176,20 @@ vec3 castRay(Ray ray, Scene scene) {
 
     vec3 finalColor = vec3(0.0);
     float frac = 1.0;
+    Ray raylist[RAY_MAX_DEPTH * 2];
 
-    for (int raybounce = 0; raybounce < RAY_MAX_DEPTH; raybounce++) {
+    for (int raybounce = 0; raybounce < RAY_MAX_DEPTH * 2; raybounce++) {
         bool breakBounceLoop = false;
         Ray nextRay;
-        float nextFrac;
+        float nextFrac = 1.0;
 
         RayIntersection obj;
         obj.t = INFINITY;
         trace(ray, scene, obj);
 
-        if (obj.t < INFINITY) {
+        if (obj.t >= INFINITY) {
+            breakBounceLoop = true;
+        } else {
             vec3 rayHit = ray.origin + ray.direction * obj.t;
             vec3 diffuse = vec3(0.0);
             vec3 specular = vec3(0.0);
@@ -213,18 +224,30 @@ vec3 castRay(Ray ray, Scene scene) {
                 float specularFactor = max(0.0, dot(reflectedLightDirection, ray.direction));
                 float dampedSpecular = pow(specularFactor, obj.mat.damping);
                 specular += dampedSpecular * distanceFade;
-
-                // --------------------------------------------------------
-                // Reflection
-                if (obj.mat.reflectivity > 0.0) {
-                    nextRay = Ray(rayHit + (obj.normal * 0.001), reflect(ray.direction, obj.normal));
-                    nextFrac -= 1.0 - obj.mat.reflectivity;
-                } else {
-                    breakBounceLoop = true;
-                }
             }
 
-            finalColor += (diffuse + specular + reflection + refraction) * frac;
+            // --------------------------------------------------------
+            // Reflection
+            if (obj.mat.reflectivity > 0.0) {
+                nextRay = Ray(rayHit, reflect(ray.direction, obj.normal));
+                nextFrac *= obj.mat.reflectivity;
+            } else {
+                breakBounceLoop = true;
+            }
+
+            // --------------------------------------------------------
+            // Refraction
+            /*if (obj.mat.refractivity > 0.0) {
+                nextRay = Ray(rayHit, refract(ray.direction, obj.normal, obj.mat.ior));
+                nextFrac *= obj.mat.reflectivity;
+            } else {
+                breakBounceLoop = true;
+            }*/
+
+            // --------------------------------------------------------
+            // Add up diffuse, specular, reflection and refraction
+            vec3 diffSpecReflec = mix(diffuse + specular, reflection, obj.mat.reflectivity);
+            finalColor += (diffSpecReflec + refraction) * frac;
         }
 
         if (breakBounceLoop || frac < 0.01) {
@@ -233,15 +256,17 @@ vec3 castRay(Ray ray, Scene scene) {
             frac = nextFrac;
             ray = nextRay;
         }
-    }
+    } // end for raybounce
 
     return finalColor;
 }
 
 void fillScene(out Scene scene) {
-    scene.spheres[0] = Sphere(vec3(0, 0, -5.0), 0.25, Material(rgb2vec(234, 147, 32), 1.0, 0.0));
-    scene.spheres[1] = Sphere(vec3(0, 0, -5.0), 1.0, Material(rgb2vec(234, 31, 72), 100.0, 0.7));
-    scene.planes[0] = Plane(vec3(0.0, -2.0, 0.0), vec3(0.0, 1.0, 0.0), Material(rgb2vec(141, 162, 196), 1.0, 0.0));
+    scene.spheres[0] = Sphere(vec3(0, 0, -5.0), 0.25, Material(rgb2vec(234, 147, 32), 1.0, 0.0, 0.5, IOR_GLASS));
+    scene.spheres[1] = Sphere(vec3(0, 0, -5.0), 1.0, Material(rgb2vec(234, 31, 72), 100.0, 0.7, 0.0, 0.0));
+    scene.planes[0] = Plane(vec3(0.0, -2.0, 0.0), vec3(0.0, 1.0, 0.0), Material(rgb2vec(141, 162, 196), 1.0, 0.0, 0.0, 0.0));
+    scene.planes[1] = Plane(vec3(-3.5, 0.0, -15.0), vec3(1.0, 0.0, 0.5), Material(rgb2vec(255, 162, 255), 1.0, 0.0, 0.0, 0.0));
+    scene.planes[2] = Plane(vec3(3.5, 0.0, -15.0), vec3(-1.0, 0.0, 0.5), Material(rgb2vec(255, 162, 255), 1.0, 0.0, 0.0, 0.0));
     scene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(1.0), 54.0);
     scene.lights[1] = Light(vec3(-4.0, 4.0, 2.0), vec3(1.0), 21.0);
 }
@@ -260,7 +285,7 @@ void main() {
 
     scene.spheres[0].position.x += cos(iTime) * 2.0;
     scene.spheres[0].position.z += sin(iTime) * 2.0;
-    scene.spheres[1].position.y += sin(iTime * 0.5) * 0.5;
+    //scene.spheres[1].position.y += sin(iTime * 0.5) * 0.5;
     //scene.lights[0].position.x += cos(iTime) * 3.0;
     //scene.lights[0].position.y += sin(iTime) * 3.0;
     //scene.planes[0].position.y += cos(iTime);
