@@ -5,7 +5,7 @@ uniform float iFrame;
 #define M_PI 3.1415926535897932384626433832795
 
 #define RAY_MIN_LENGTH 0.000000001
-#define RAY_MAX_LENGTH 100000000000.0
+#define INFINITY 100000000000.0
 #define RAY_MAX_DEPTH 5
 
 #define N_SPHERES 2
@@ -26,9 +26,15 @@ struct Camera {
     CameraSize size;
 };
 
+struct Material {
+    vec3 color;
+    float damping;
+    float reflectivity;
+};
+
 struct RayIntersection {
     float t;
-    vec3 color;
+    Material mat;
     vec3 normal;
 };
 
@@ -40,18 +46,17 @@ struct Ray {
 struct Sphere {
     vec3 position;
     float radius;
-    vec3 color;
+    Material mat;
 };
 
 struct Plane {
     vec3 position;
     vec3 normal;
-    vec3 color;
+    Material mat;
 };
 
 struct Light {
     vec3 position;
-    vec3 direction;
     vec3 color;
     float force;
 };
@@ -91,7 +96,7 @@ bool intersect(Ray ray, Sphere sphere, inout RayIntersection intersection) {
     // First check if close intersection is valid
     if (t1 > RAY_MIN_LENGTH && t1 < intersection.t) {
         intersection.t = t1;
-        intersection.color = sphere.color;
+        intersection.mat = sphere.mat;
         intersection.normal = normalize(ray.origin + ray.direction * t1 - sphere.position);
         return true;
     } else {
@@ -118,7 +123,7 @@ bool intersect(Ray ray, Plane plane, inout RayIntersection intersection) {
     }
 
     intersection.t = t;
-    intersection.color = plane.color;
+    intersection.mat = plane.mat;
     intersection.normal = plane.normal;
 
     return true;
@@ -159,57 +164,86 @@ void trace(vec3 origin, vec3 direction, Scene scene, out RayIntersection interse
     for (int i = 0; i < N_PLANES; i++) intersect(ray, scene.planes[i], intersection);
 }
 
-vec3 castRay(Ray ray, Scene scene, int depth, vec3 currentColor) {
-    if (depth > RAY_MAX_DEPTH) {
-        return currentColor;
-    }
+vec3 castRay(Ray ray, Scene scene) {
 
-    RayIntersection intersection = RayIntersection(RAY_MAX_LENGTH, vec3(0.0), vec3(0.0));
-    for (int i = 0; i < N_SPHERES; i++) intersect(ray, scene.spheres[i], intersection);
-    for (int i = 0; i < N_PLANES; i++) intersect(ray, scene.planes[i], intersection);
+    vec3 finalColor = vec3(0.0);
+    float frac = 1.0;
 
-    vec3 hitColor = vec3(0.0);
+    for (int raybounce = 0; raybounce < RAY_MAX_DEPTH; raybounce++) {
+        bool breakBounceLoop = false;
+        Ray nextRay;
+        float nextFrac;
 
-    // https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-overview/light-transport-ray-tracing-whitted
-    // http://www.cs.cornell.edu/courses/cs4620/2012fa/lectures/35raytracing.pdf
-    if (intersection.t < RAY_MAX_LENGTH) {
-        vec3 hitPoint = ray.origin + ray.direction * intersection.t;
+        RayIntersection obj;
+        obj.t = INFINITY;
+        trace(ray, scene, obj);
 
-        for (int i = 0; i < N_LIGHTS; i++) {
-            // compute shadow ray
-            vec3 lightDirection = scene.lights[i].position - hitPoint;
-            float dotLightDirection = dot(intersection.normal, normalize(lightDirection));
+        if (obj.t < INFINITY) {
+            vec3 rayHit = ray.origin + ray.direction * obj.t;
+            vec3 diffuse = vec3(0.0);
+            vec3 specular = vec3(0.0);
+            vec3 reflection = vec3(0.0);
+            vec3 refraction = vec3(0.0);
 
-            float len2 = dot(lightDirection, lightDirection);
+            for (int i = 0; i < N_LIGHTS; i++) {
+                vec3 rayHitToLight = scene.lights[i].position - rayHit;
+                vec3 lightDirection = normalize(rayHitToLight);
+                float lightDstSq = dot(rayHitToLight, rayHitToLight);
+                float distanceFade = 1.0 / lightDstSq;
 
-            // Phong
-            RayIntersection lightIntersection = RayIntersection(RAY_MAX_LENGTH, vec3(0.0), vec3(0.0));
-            vec3 lightRayOrigin = hitPoint + (intersection.normal * 0.001);
-            trace(lightRayOrigin, normalize(lightDirection), scene, lightIntersection);
+                // --------------------------------------------------------
+                // Diffuse
+                float brightness = 0.2 * distanceFade;
+                vec3 lightRayOrigin = rayHit + (obj.normal * 0.001);
+                RayIntersection lightIntersection;
+                lightIntersection.t = INFINITY;
+                trace(lightRayOrigin, normalize(lightDirection), scene, lightIntersection);
 
-            vec3 shadedColor = intersection.color * clamp(dot(intersection.normal, scene.lights[i].direction) * -1.0, 0.0, 1.0);
-            if (lightIntersection.t * lightIntersection.t > len2) {
-                hitColor += shadedColor;
+                if (lightIntersection.t * lightIntersection.t > lightDstSq) {
+                    float lightOnSurface = max(0.0, dot(obj.normal, lightDirection));
+                    brightness += 0.8 * lightOnSurface * (scene.lights[i].force * distanceFade);
+                }
+
+                diffuse += obj.mat.color * brightness;
+
+                // --------------------------------------------------------
+                // https://youtu.be/GZ_1xOm-3qU?t=391
+                // Specular
+                vec3 reflectedLightDirection = reflect(lightDirection, obj.normal);
+                float specularFactor = max(0.0, dot(reflectedLightDirection, ray.direction));
+                float dampedSpecular = pow(specularFactor, obj.mat.damping);
+                specular += dampedSpecular * distanceFade;
+
+                // --------------------------------------------------------
+                // Reflection
+                if (obj.mat.reflectivity > 0.0) {
+                    nextRay = Ray(rayHit + (obj.normal * 0.001), reflect(ray.direction, obj.normal));
+                    nextFrac -= 1.0 - obj.mat.reflectivity;
+                } else {
+                    breakBounceLoop = true;
+                }
             }
 
-            // https://youtu.be/GZ_1xOm-3qU?t=391
-            // Specular
-            vec3 reflectedLightDirection = reflect(-scene.lights[i].direction, intersection.normal);
-            float specular = max(0.0, dot(reflectedLightDirection, ray.direction));
-            float damping = 0.1;
-            hitColor += max(0.0, (specular - damping));
+            finalColor += (diffuse + specular + reflection + refraction) * frac;
+        }
+
+        if (breakBounceLoop || frac < 0.01) {
+            break;
+        } else  {
+            frac = nextFrac;
+            ray = nextRay;
         }
     }
 
-    return hitColor;
+    return finalColor;
 }
 
 void fillScene(out Scene scene) {
-    scene.spheres[0] = Sphere(vec3(0, 0, -3.0), 1.0, rgb2vec(234, 147, 32));
-    scene.spheres[1] = Sphere(vec3(0, 0, -5.0), 2.0, rgb2vec(234, 31, 72));
-    scene.planes[0] = Plane(vec3(0.0, -1.0, 0.0), vec3(0.0, 1.0, 0.0), rgb2vec(141, 162, 196));
-    scene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(0.0, -1.0, 0.0), vec3(1.0), 1.0);
-    scene.lights[1] = Light(vec3(-4.0, 4.0, 2.0), vec3(0.3, -1.0, 0.0), vec3(1.0), 1.0);
+    scene.spheres[0] = Sphere(vec3(0, 0, -5.0), 0.25, Material(rgb2vec(234, 147, 32), 1.0, 0.0));
+    scene.spheres[1] = Sphere(vec3(0, 0, -5.0), 1.0, Material(rgb2vec(234, 31, 72), 100.0, 0.7));
+    scene.planes[0] = Plane(vec3(0.0, -2.0, 0.0), vec3(0.0, 1.0, 0.0), Material(rgb2vec(141, 162, 196), 1.0, 0.0));
+    scene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(1.0), 54.0);
+    scene.lights[1] = Light(vec3(-4.0, 4.0, 2.0), vec3(1.0), 21.0);
 }
 
 void main() {
@@ -224,13 +258,14 @@ void main() {
     Scene scene;
     fillScene(scene);
 
-    scene.spheres[0].position.x += cos(iTime);
-    scene.spheres[0].position.z += cos(iTime);
-    scene.lights[0].position.x += cos(iTime) * 3.0;
-    scene.lights[0].position.y += sin(iTime) * 3.0;
+    scene.spheres[0].position.x += cos(iTime) * 2.0;
+    scene.spheres[0].position.z += sin(iTime) * 2.0;
+    scene.spheres[1].position.y += sin(iTime * 0.5) * 0.5;
+    //scene.lights[0].position.x += cos(iTime) * 3.0;
+    //scene.lights[0].position.y += sin(iTime) * 3.0;
     //scene.planes[0].position.y += cos(iTime);
 
-    vec3 color = castRay(cameraRay, scene, 0, vec3(0.0));
+    vec3 color = castRay(cameraRay, scene);
 
     gl_FragColor = vec4(color, 1.0);
  }
