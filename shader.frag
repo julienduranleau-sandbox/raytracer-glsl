@@ -14,7 +14,7 @@ uniform float iFrame;
 #define IOR_GLASS 1.52
 #define IOR_DIAMOND 2.42
 
-#define N_SPHERES 2
+#define N_SPHERES 5
 #define N_PLANES 3
 #define N_LIGHTS 2
 
@@ -176,9 +176,8 @@ vec3 castRay(Ray ray, Scene scene) {
 
     vec3 finalColor = vec3(0.0);
     float frac = 1.0;
-    Ray raylist[RAY_MAX_DEPTH * 2];
 
-    for (int raybounce = 0; raybounce < RAY_MAX_DEPTH * 2; raybounce++) {
+    for (int raybounce = 0; raybounce < RAY_MAX_DEPTH; raybounce++) {
         bool breakBounceLoop = false;
         Ray nextRay;
         float nextFrac = 1.0;
@@ -238,10 +237,8 @@ vec3 castRay(Ray ray, Scene scene) {
             // --------------------------------------------------------
             // Refraction
             /*if (obj.mat.refractivity > 0.0) {
-                nextRay = Ray(rayHit, refract(ray.direction, obj.normal, obj.mat.ior));
-                nextFrac *= obj.mat.reflectivity;
-            } else {
-                breakBounceLoop = true;
+                Ray specularRay = Ray(rayHit, refract(ray.direction, obj.normal, obj.mat.ior));
+                // obj.mat.reflectivity;
             }*/
 
             // --------------------------------------------------------
@@ -262,18 +259,19 @@ vec3 castRay(Ray ray, Scene scene) {
 }
 
 void fillScene(out Scene scene) {
-    scene.spheres[0] = Sphere(vec3(0, 0, -5.0), 0.25, Material(rgb2vec(234, 147, 32), 1.0, 0.0, 0.5, IOR_GLASS));
-    scene.spheres[1] = Sphere(vec3(0, 0, -5.0), 1.0, Material(rgb2vec(234, 31, 72), 100.0, 0.7, 0.0, 0.0));
-    scene.planes[0] = Plane(vec3(0.0, -2.0, 0.0), vec3(0.0, 1.0, 0.0), Material(rgb2vec(141, 162, 196), 1.0, 0.0, 0.0, 0.0));
-    scene.planes[1] = Plane(vec3(-3.5, 0.0, -15.0), vec3(1.0, 0.0, 0.5), Material(rgb2vec(255, 162, 255), 1.0, 0.0, 0.0, 0.0));
-    scene.planes[2] = Plane(vec3(3.5, 0.0, -15.0), vec3(-1.0, 0.0, 0.5), Material(rgb2vec(255, 162, 255), 1.0, 0.0, 0.0, 0.0));
+    scene.spheres[0] = Sphere(vec3(1.0, 0, -6.0), 0.2, Material(rgb2vec(255, 32, 32), 1.0, 0.0, 0.5, IOR_GLASS));
+    scene.spheres[1] = Sphere(vec3(-1.0, 0, -8.0), 1.0, Material(rgb2vec(0, 255, 190), 100.0, 0.4, 0.0, 0.0));
+    scene.spheres[2] = Sphere(vec3(1.0, 0, -6.0), 1.0, Material(rgb2vec(0, 100, 255), 100.0, 0.7, 0.0, 0.0));
+    scene.planes[0] = Plane(vec3(0.0, -2.0, 0.0), vec3(0.0, 1.0, 0.0), Material(rgb2vec(100, 100, 100), 1.0, 0.0, 0.0, 0.0));
+    scene.planes[1] = Plane(vec3(-3.5, 0.0, -15.0), vec3(1.0, 0.0, 0.5), Material(rgb2vec(100, 100, 255), 1.0, 0.0, 0.0, 0.0));
+    scene.planes[2] = Plane(vec3(3.5, 0.0, -15.0), vec3(-1.0, 0.0, 0.5), Material(rgb2vec(255, 100, 100), 1.0, 0.0, 0.0, 0.0));
     scene.lights[0] = Light(vec3(1.0, 4.0, 2.0), vec3(1.0), 54.0);
     scene.lights[1] = Light(vec3(-4.0, 4.0, 2.0), vec3(1.0), 21.0);
 }
 
 void main() {
-    vec3 camOrigin = vec3(0.0, 0.0, 1.0);
-    vec3 camTarget = vec3(0.0, 0.0, 0.0);
+    vec3 camOrigin = vec3(0.0, 2.0, 1.0);
+    vec3 camTarget = vec3(0.0, -0.2, -8.0);
     vec3 camUpGuide = vec3(0.0, 1.0, 0.0);
     float camFov = 45.0;
     float camAspectRatio = iResolution.x / iResolution.y;
@@ -283,9 +281,10 @@ void main() {
     Scene scene;
     fillScene(scene);
 
-    scene.spheres[0].position.x += cos(iTime) * 2.0;
-    scene.spheres[0].position.z += sin(iTime) * 2.0;
-    //scene.spheres[1].position.y += sin(iTime * 0.5) * 0.5;
+    scene.spheres[0].position.x += cos(iTime) * 1.4;
+    scene.spheres[0].position.z += sin(iTime) * 1.4;
+    scene.spheres[1].position.y += sin(iTime * 0.5) * 0.3;
+    scene.spheres[2].position.y += cos(iTime * 0.5) * 0.3;
     //scene.lights[0].position.x += cos(iTime) * 3.0;
     //scene.lights[0].position.y += sin(iTime) * 3.0;
     //scene.planes[0].position.y += cos(iTime);
