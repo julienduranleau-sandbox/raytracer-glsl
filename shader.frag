@@ -226,25 +226,23 @@ vec3 castRay(Ray ray, Scene scene) {
             }
 
             // --------------------------------------------------------
-            // Reflection
+            // Reflection || Refraction
             if (obj.mat.reflectivity > 0.0) {
                 nextRay = Ray(rayHit, reflect(ray.direction, obj.normal));
                 nextFrac *= obj.mat.reflectivity;
+            } else if (obj.mat.refractivity > 0.0) {
+                nextRay = Ray(rayHit + ray.direction * 0.0001, refract(ray.direction, obj.normal, IOR_AIR / obj.mat.ior));
+                nextFrac *= obj.mat.refractivity;
             } else {
                 breakBounceLoop = true;
             }
 
             // --------------------------------------------------------
-            // Refraction
-            /*if (obj.mat.refractivity > 0.0) {
-                Ray specularRay = Ray(rayHit, refract(ray.direction, obj.normal, obj.mat.ior));
-                // obj.mat.reflectivity;
-            }*/
-
-            // --------------------------------------------------------
             // Add up diffuse, specular, reflection and refraction
-            vec3 diffSpecReflec = mix(diffuse + specular, reflection, obj.mat.reflectivity);
-            finalColor += (diffSpecReflec + refraction) * frac;
+            vec3 diffSpecRefrac = mix(diffuse + specular, refraction, obj.mat.refractivity);
+            finalColor += diffSpecRefrac * frac;
+            // vec3 diffSpecReflec = mix(diffuse + specular, reflection, obj.mat.reflectivity);
+            // finalColor += (diffSpecReflec + refraction) * frac;
         }
 
         if (breakBounceLoop || frac < 0.01) {
@@ -255,12 +253,16 @@ vec3 castRay(Ray ray, Scene scene) {
         }
     } // end for raybounce
 
+    if (finalColor.r + finalColor.g + finalColor.b == 0.0) {
+        return vec3(1.0);
+    }
     return finalColor;
 }
 
 void fillScene(out Scene scene) {
-    scene.spheres[0] = Sphere(vec3(1.0, 0, -6.0), 0.2, Material(rgb2vec(255, 32, 32), 1.0, 0.0, 0.5, IOR_GLASS));
+    scene.spheres[0] = Sphere(vec3(1.0, 0, -6.0), 0.2, Material(rgb2vec(255, 32, 32), 1.0, 0.0, 1.0, IOR_GLASS));
     scene.spheres[1] = Sphere(vec3(-1.0, 0, -8.0), 1.0, Material(rgb2vec(0, 255, 190), 100.0, 0.4, 0.0, 0.0));
+    //scene.spheres[2] = Sphere(vec3(1.0, 0, -6.0), 1.0, Material(rgb2vec(0, 100, 255), 100.0, 0.7, 0.0, 0.0));
     scene.spheres[2] = Sphere(vec3(1.0, 0, -6.0), 1.0, Material(rgb2vec(0, 100, 255), 100.0, 0.7, 0.0, 0.0));
     scene.planes[0] = Plane(vec3(0.0, -2.0, 0.0), vec3(0.0, 1.0, 0.0), Material(rgb2vec(100, 100, 100), 1.0, 0.0, 0.0, 0.0));
     scene.planes[1] = Plane(vec3(-3.5, 0.0, -15.0), vec3(1.0, 0.0, 0.5), Material(rgb2vec(100, 100, 255), 1.0, 0.0, 0.0, 0.0));
